@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMR Route Planner</title>
+<meta name="description" content="Free AMR route planner: draw routes on your floor plan, size a Pudu T300 or MP2000 fleet and build the business case. Runs in your browser; nothing is uploaded.">
+<meta name="theme-color" content="#D9480F">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Crect width='108' height='108' rx='24' fill='%23D9480F'/%3E%3Cpath d='M33 72V46h23v16h19V36' fill='none' stroke='%23fff' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='33' cy='72' r='7' fill='%2316212B' stroke='%23fff' stroke-width='3'/%3E%3Ccircle cx='75' cy='36' r='7' fill='%2316212B' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: engineering workbench. A fixed KPI rail on top, tabbed work areas below; the floor plan gets the most room. */
+:root{
+  --paper:#F3F5F6; --panel:#FFFFFF; --ink:#16212B; --muted:#5B6874; --line:#D5DBE0;
+  --accent:#D9480F; --accent-ink:#FFFFFF; --soft:#E9EDF0;
+  --good:#2F7D4A; --warn:#B7791F; --bad:#C0392B;
+  --display:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1519; --panel:#172027; --ink:#E6ECF0; --muted:#94A3AF; --line:#2B3842;
+    --accent:#F2703A; --accent-ink:#1A0D06; --soft:#1F2A32;
+    --good:#5DBB7E; --warn:#E3B04B; --bad:#EF6B5E; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1519; --panel:#172027; --ink:#E6ECF0; --muted:#94A3AF; --line:#2B3842;
+  --accent:#F2703A; --accent-ink:#1A0D06; --soft:#1F2A32;
+  --good:#5DBB7E; --warn:#E3B04B; --bad:#EF6B5E; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:18px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:15px;font-weight:600}
+h3{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.num,td.n,input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 10px;min-height:32px}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=text],input[type=number]{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-height:32px;width:100%}
+input[type=number]{text-align:right}
+label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+label.inline{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+.app{display:flex;flex-direction:column;height:100%}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header .brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.logo{width:28px;height:28px;border-radius:6px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink);font-family:var(--mono);font-weight:600;font-size:12px}
+header .ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+header select{width:auto;min-width:200px}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.kpi{background:var(--panel);padding:8px 16px}
+.kpi .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.kpi .v{font-family:var(--mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11px;color:var(--muted)}
+.kpi.hl .v{color:var(--accent)}
+nav{display:flex;gap:2px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 12px;color:var(--muted);font-weight:500;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+main{flex:1;min-height:0;overflow:auto}
+section.view{display:none;padding:16px}
+section.view.active{display:block}
+#v-layout.active{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;height:100%;padding:12px 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.toolbar .sep{width:1px;height:24px;background:var(--line);margin:0 4px}
+.canvas-col{display:flex;flex-direction:column;gap:8px;min-height:0}
+.canvas-wrap{position:relative;flex:1;min-height:360px;background:var(--soft);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none}
+canvas#plan{display:block;width:100%;height:100%}
+.hint{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;border:1px solid currentColor;white-space:nowrap}
+.chip.good{color:var(--good)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.neutral{color:var(--muted)}
+.side{display:flex;flex-direction:column;gap:12px;overflow:auto;min-height:0}
+.list{display:flex;flex-direction:column;gap:4px}
+.row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+.row.sel{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.row .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row button{min-height:26px;padding:2px 7px;font-size:12px}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;white-space:nowrap}
+th{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;background:var(--soft);position:sticky;top:0}
+td.n,th.n{text-align:right}
+td input{min-width:70px}
+td input[type=text]{min-width:220px}
+td select{min-width:150px}
+tfoot td{font-weight:600;background:var(--soft)}
+.help p{margin:0;max-width:75ch}
+.help ol,.help ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;max-width:80ch}
+td.wrap{white-space:normal;min-width:220px}
+input.ovr::placeholder{color:var(--muted);opacity:.75}
+input.ovr.set{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.note{font-size:12.5px;color:var(--muted);max-width:75ch}
+.callout{border-left:3px solid var(--warn);background:var(--soft);padding:10px 12px;border-radius:0 6px 6px 0;font-size:13px;max-width:90ch}
+.callout ul{margin:6px 0 0;padding-left:18px}
+.big{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.big .tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel)}
+.tile .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tile .v{font-family:var(--mono);font-size:22px;font-weight:600}
+.chartbox{position:relative;height:260px}
+canvas.chart{width:100%;height:100%;display:block}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:30px}
+.modal-bg{position:fixed;inset:0;background:rgba(10,15,20,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:min(420px,100%);display:flex;flex-direction:column;gap:10px;max-height:90%;overflow:auto}
+.modal .actions{display:flex;justify-content:flex-end;gap:8px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
+.toast.show{opacity:1}
+textarea{width:100%;min-height:160px;font-family:var(--mono);font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+@media (max-width:900px){
+  #v-layout.active{grid-template-columns:1fr;height:auto}
+  .canvas-wrap{min-height:420px}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .kpi{padding:6px 10px}.kpi .v{font-size:16px}
+  .grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:600px){header .brand .note{display:none} header{padding:8px 12px;gap:8px} header .ctl button{padding:4px 8px;font-size:13px}}
+@media (max-width:420px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))} header select{min-width:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand"><div class="logo">AMR</div><div><h1>AMR Route Planner</h1><div class="note" style="font-size:12px">Route design, fleet sizing and business case for small parts and pallet AMRs</div></div></div>
+  <div class="ctl">
+    <select id="projSel" aria-label="Project"></select>
+    <button id="btnNew">New project</button>
+    <button id="btnOpen">Open file</button>
+    <button id="btnSave">Save project</button>
+    <button id="btnCsv">Export results CSV</button>
+    <input type="file" id="fileProj" accept=".json,application/json" hidden>
+  </div>
+</header>
+<div class="kpis" id="kpis"></div>
+<nav role="tablist">
+  <button class="tab" role="tab" data-v="layout" aria-selected="true">1 · Layout &amp; routes</button>
+  <button class="tab" role="tab" data-v="fleet" aria-selected="false">2 · Demand &amp; fleet</button>
+  <button class="tab" role="tab" data-v="case" aria-selected="false">3 · Business case</button>
+  <button class="tab" role="tab" data-v="help" aria-selected="false">Help</button>
+</nav>
+<main>
+<section class="view active" id="v-layout">
+  <div class="canvas-col">
+    <div class="toolbar" id="tools">
+      <button data-mode="pan" class="on" title="Drag to pan, drag a station to move it">Select / pan</button>
+      <button data-mode="calib" title="Click two points of known distance">Calibrate scale</button>
+      <button data-mode="station" title="Click to place a pickup or drop point">Add station</button>
+      <button data-mode="route" title="Click a station, then waypoints, then the destination station">Draw route</button>
+      <button data-mode="measure" title="Click points to measure a path">Measure</button>
+      <span class="sep"></span>
+      <label class="inline"><input type="checkbox" id="snap" checked> Snap 90°</label>
+      <button id="btnUndoPt" title="Remove the last point">Undo point</button>
+      <button id="btnFinish" title="Finish the measure line">Finish</button>
+      <button id="btnFit">Fit</button>
+      <span class="sep"></span>
+      <button id="btnUpload" class="primary">Upload layout</button>
+      <input type="file" id="fileImg" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden>
+    </div>
+    <div class="canvas-wrap" id="wrap"><canvas id="plan" aria-label="Site layout drawing"></canvas></div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div class="side">
+    <div class="card">
+      <h3>Scale</h3>
+      <div id="scaleInfo" class="note"></div>
+      <div class="grid2">
+        <label for="unitSel">Display units<select id="unitSel"><option value="ft">feet</option><option value="m">metres</option></select></label>
+        <label for="curSel">Currency<select id="curSel"><option>$</option><option>£</option><option>€</option><option value="C$">C$</option></select></label>
+      </div>
+    </div>
+    <div class="card"><h3>Stations</h3><div class="list" id="stList"></div></div>
+    <div class="card"><h3>Routes</h3><div class="list" id="rtList"></div><div class="note">Distances are one-way along the drawn path. Set an override on the Demand tab if you have a surveyed figure.</div></div>
+  </div>
+</section>
+
+<section class="view" id="v-fleet">
+  <div class="stack">
+    <div class="cols">
+      <div class="card">
+        <div class="toolbar" style="justify-content:space-between"><h2>Robot</h2><span id="robotClassChip"></span></div>
+        <label for="rModel">AMR type<select id="rModel"></select></label>
+        <div class="grid2">
+          <label for="rPayload">Payload (kg)<input type="number" id="rPayload" data-k="robot.payload"></label>
+          <label for="rAisle">Min. aisle / path width (m)<input type="number" id="rAisle" step="0.05" data-k="robot.aisle"></label>
+          <label for="rSpeedE">Max speed, empty (m/s)<input type="number" id="rSpeedE" step="0.05" data-k="robot.speedE"></label>
+          <label for="rSpeedL">Max speed, loaded (m/s)<input type="number" id="rSpeedL" step="0.05" data-k="robot.speedL"></label>
+          <label for="rRun">Run time at typical load (h)<input type="number" id="rRun" step="0.25" data-k="robot.runtime"></label>
+          <label for="rChg">Charge time for that run (h)<input type="number" id="rChg" step="0.05" data-k="robot.charge"></label>
+          <label for="rUp">Uptime (0–1)<input type="number" id="rUp" step="0.01" data-k="robot.uptime"></label>
+          <label for="rPrice">Price each (edit to your quote)<input type="number" id="rPrice" data-k="fin.price"></label>
+        </div>
+        <div class="note" id="robotNote"></div>
+        <div class="toolbar"><button id="btnResetRobot">Reset to catalogue values</button></div>
+      </div>
+      <div class="card">
+        <h2>Cycle time defaults</h2>
+        <div class="grid2">
+          <label for="cEff">Speed efficiency (0–1)<input type="number" id="cEff" step="0.05" data-k="robot.eff"></label>
+          <label for="cExtra">Extra delay per trip (s)<input type="number" id="cExtra" step="5" data-k="robot.extraS"></label>
+          <label for="cWaitL">Wait at pickup (min)<input type="number" id="cWaitL" step="0.25" data-k="robot.waitLoad"></label>
+          <label for="cWaitD">Wait at drop (min)<input type="number" id="cWaitD" step="0.25" data-k="robot.waitDrop"></label>
+          <label for="cPick">Robot pick / dock time (s)<input type="number" id="cPick" step="5" data-k="robot.pickS"></label>
+          <label for="cDrop">Robot drop / undock time (s)<input type="number" id="cDrop" step="5" data-k="robot.dropS"></label>
+        </div>
+        <div class="note"><strong>Wait</strong> is time the robot stands while a person loads, unloads or confirms. <strong>Pick / drop</strong> is the robot's own handling, such as fork-in and lift on the pallet AMR. <strong>Extra delay</strong> covers doors, lifts and crossings. Efficiency scales top speed for slowdowns near people and at corners. Each route can override any of these.</div>
+      </div>
+      <div class="card">
+        <h2>Operation</h2>
+        <div class="grid2">
+          <label for="oHours">Operating hours / day<input type="number" id="oHours" step="0.5" data-k="ops.hours"></label>
+          <label for="oDays">Working days / month<input type="number" id="oDays" data-k="ops.days"></label>
+          <label for="oPeak">Peak-hour factor<input type="number" id="oPeak" step="0.05" data-k="ops.peak"></label>
+          <label for="oUtil">Target utilisation (0–1)<input type="number" id="oUtil" step="0.05" data-k="ops.util"></label>
+          <label for="oSpare">Spare robots<input type="number" id="oSpare" data-k="ops.spare"></label>
+          <label for="oPerCharger">Robots per charger<input type="number" id="oPerCharger" data-k="ops.perCharger"></label>
+        </div>
+        <div class="note">Peak factor scales average hourly trips up to the busy hour. Use P90 ÷ average daily demand from your own data; 1.2–1.4 is common.</div>
+      </div>
+      <div class="card">
+        <h2>Manual baseline</h2>
+        <label for="mMethod">How it's moved today<select id="mMethod"></select></label>
+        <div class="grid2">
+          <label for="mPace" id="mPaceL">Travel pace (sec / ft)<input type="number" id="mPace" step="0.01"></label>
+          <label for="mHandle">Handling per trip (min)<input type="number" id="mHandle" step="0.25" data-k="manual.handle"></label>
+          <label for="mRate">Labour rate / hour<input type="number" id="mRate" step="0.05" data-k="manual.rate"></label>
+          <label for="mBurden">On-cost uplift (%)<input type="number" id="mBurden" data-k="manual.burden"></label>
+        </div>
+        <div class="note">Walking at 0.4 s/ft with no handling matches the simple method: trips × round-trip distance × pace × rate × days. Pace presets other than walking are typical figures: replace them with your own time studies. Handling stays with people under AMR too, so it changes the baseline but not the saving.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="toolbar" style="justify-content:space-between"><h2>Routes and demand</h2><button id="btnAddRoute">Add route without drawing</button></div>
+      <div class="tablewrap"><table id="rtTable"></table></div>
+      <div class="note">Loads/day is the demand: requests, totes, carts or pallets. Trips = loads ÷ loads per trip, so batching cuts trips. Fill in the narrowest aisle on a route to check it against the robot. Routes with the same Group share a dedicated pool of robots.</div>
+    </div>
+    <div class="card">
+      <h2>Cycle time by route</h2>
+      <div class="tablewrap"><table id="cyTable"></table></div>
+      <div class="note">Leave an override blank to use the default, shown in grey. Overridden cells are outlined in orange. A fixed cycle time replaces the whole calculation for that route, for example when you've timed a trial.</div>
+    </div>
+    <div class="card"><h2>Fleet by group</h2><div class="tablewrap"><table id="grpTable"></table></div><div class="note" id="availNote"></div></div>
+  </div>
+</section>
+
+<section class="view" id="v-case">
+  <div class="stack">
+    <div class="big" id="caseTiles"></div>
+    <div class="cols">
+      <div class="card">
+        <h2>Investment</h2>
+        <div class="seg" role="group" aria-label="Funding model"><button data-fm="capex">Buy (capex)</button><button data-fm="raas">Robot-as-a-Service</button></div>
+        <div class="grid2">
+          <label for="fPrice">Robot price (each)<input type="number" id="fPrice" data-k="fin.price"></label>
+          <label for="fRaas">RaaS fee / robot / month<input type="number" id="fRaas" data-k="fin.raas"></label>
+          <label for="fCharger">Charger price (each)<input type="number" id="fCharger" data-k="fin.charger"></label>
+          <label for="fInteg">Integration &amp; commissioning<input type="number" id="fInteg" data-k="fin.integ"></label>
+          <label for="fSite">Site prep (floor, Wi-Fi, doors)<input type="number" id="fSite" data-k="fin.site"></label>
+          <label for="fTrain">Training &amp; change<input type="number" id="fTrain" data-k="fin.train"></label>
+          <label for="fAccy">Top modules, racks, carts (each robot)<input type="number" id="fAccy" data-k="fin.accy"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Running costs, savings and finance</h2>
+        <div class="grid2">
+          <label for="fMaint">Maintenance (% of robot capex / yr)<input type="number" id="fMaint" data-k="fin.maint"></label>
+          <label for="fSoft">Fleet software / robot / month<input type="number" id="fSoft" data-k="fin.soft"></label>
+          <label for="fRetain">People time kept per trip (min)<input type="number" id="fRetain" step="0.25" data-k="fin.retain"></label>
+          <label for="fEquip">Equipment cost avoided / month<input type="number" id="fEquip" data-k="fin.equip"></label>
+          <label for="fDisc">Discount rate (%)<input type="number" id="fDisc" data-k="fin.disc"></label>
+          <label for="fYears">Horizon (years)<input type="number" id="fYears" data-k="fin.years"></label>
+          <label for="fBasis">Savings basis<select id="fBasis" data-k="fin.basis"><option value="hours">Hours released</option><option value="fte">Whole FTEs only</option></select></label>
+          <label for="fFteH">Productive hours per FTE / day<input type="number" id="fFteH" step="0.5" data-k="fin.fteH"></label>
+        </div>
+        <div class="note">“Equipment cost avoided” is anything retired by the robots, such as a forklift or pallet truck lease, its charging and its servicing. “People time kept” is any walk-to-robot or confirmation time left after automation. “Whole FTEs only” counts a saving only when a full person is released.</div>
+      </div>
+    </div>
+    <div class="card"><h2>Cumulative cash position</h2><div class="chartbox"><canvas class="chart" id="cashChart" aria-label="Cumulative cash flow chart"></canvas></div></div>
+    <div class="cols">
+      <div class="card"><h2>Cost build-up</h2><div class="tablewrap"><table id="costTable"></table></div></div>
+      <div class="card"><h2>Sensitivity: payback (months)</h2><div class="tablewrap"><table id="sensTable"></table></div><div class="note">Rows change the labour rate and columns change demand. Each scenario re-sizes the fleet and ignores manual robot overrides.</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="view" id="v-help">
+  <div class="stack help">
+    <div class="card">
+      <h2>How to use AMR Route Planner</h2>
+      <p>AMR Route Planner turns a floor plan into an AMR fleet size and a business case. You trace routes on your layout, enter how much moves each day, and the app works out cycle times, robots needed and payback against moving loads by hand. It covers two robot types: the <strong>Pudu T300</strong> for small parts (up to 300 kg) and the <strong>Pudu MP2000</strong> for pallets (up to 2,000 kg).</p>
+      <p>Work through tabs 1 to 3 in order. The summary bar at the top updates as you change anything. The app opens on a demo site with example data so you can try every screen first.</p>
+    </div>
+
+    <div class="card">
+      <h2>Quick start: a new site in 10 minutes</h2>
+      <ol>
+        <li><strong>New project.</strong> Tap <em>New project</em> and name the site.</li>
+        <li><strong>Upload layout.</strong> Tap <em>Upload layout</em> and pick a PNG or JPG floor plan. Export a PDF page as an image first.</li>
+        <li><strong>Calibrate.</strong> Tap both ends of a dimension you know, such as a rack run or column spacing, and enter its real length.</li>
+        <li><strong>Add stations.</strong> Choose <em>Add station</em> and tap each pickup and drop point, then name it.</li>
+        <li><strong>Draw routes.</strong> Choose <em>Draw route</em>, tap the start station, tap each corner along the aisle, then tap the destination. Enter loads per day.</li>
+        <li><strong>Pick the AMR.</strong> On <em>2 · Demand &amp; fleet</em>, set <em>AMR type</em> to small parts (T300) or pallet (MP2000).</li>
+        <li><strong>Check demand and timings.</strong> Correct loads per day and loads per trip, then review the wait times.</li>
+        <li><strong>Set costs.</strong> On <em>3 · Business case</em>, replace the default prices and installation costs with your quotes.</li>
+        <li><strong>Read the result.</strong> The summary bar shows robots needed and payback; the cash chart shows break-even.</li>
+        <li><strong>Save.</strong> Tap <em>Save project</em> for a backup file, or <em>Export results CSV</em> for a spreadsheet.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>1 · Layout &amp; routes</h2>
+      <p>This tab turns your floor plan into measured route distances. Calibrate before you draw: every distance depends on the scale.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Button</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>Select / pan</td><td class="wrap">Drag to pan, pinch or scroll to zoom. Drag a station to move it; its routes follow. Tap a route to show its length.</td></tr>
+          <tr><td>Calibrate scale</td><td class="wrap">Tap two points a known distance apart and enter the length. Use the longest dimension you trust.</td></tr>
+          <tr><td>Add station</td><td class="wrap">Tap the plan to place a pickup or drop point, then name it.</td></tr>
+          <tr><td>Draw route</td><td class="wrap">Tap the start station, each corner, then the end station.</td></tr>
+          <tr><td>Measure</td><td class="wrap">Tap points along any path; tap Finish or double-tap for the total.</td></tr>
+          <tr><td>Snap 90°</td><td class="wrap">Keeps segments horizontal or vertical to follow aisles. Untick for diagonals.</td></tr>
+          <tr><td>Undo point · Finish · Fit</td><td class="wrap">Remove the last point, end a measurement, or fit the plan to the screen.</td></tr>
+        </tbody>
+      </table></div>
+      <p>The side panel sets feet or metres and the currency, and lists stations and routes. Deleting a station also deletes its routes. Draw routes along the aisles the robot will use, not straight lines between stations.</p>
+    </div>
+
+    <div class="card">
+      <h2>2 · Demand &amp; fleet</h2>
+      <p>This tab sizes the fleet. Every figure can be edited; the defaults are a starting point, not a quote.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th></th><th>Small parts AMR</th><th>Pallet AMR</th></tr></thead>
+        <tbody>
+          <tr><td>Reference robot</td><td>Pudu T300</td><td>Pudu MP2000</td></tr>
+          <tr><td>Payload</td><td class="num">300 kg</td><td class="num">2,000 kg</td></tr>
+          <tr><td>Speed empty / loaded</td><td class="num">1.2 / 1.2 m/s</td><td class="num">1.6 / 1.2 m/s</td></tr>
+          <tr><td>Run time · charge</td><td class="num">8 h · 2 h</td><td class="num">8 h · 2 h</td></tr>
+          <tr><td>Min. aisle</td><td class="num">0.6 m</td><td class="num">2.0 m</td></tr>
+          <tr><td>Default price</td><td class="num">$24,000</td><td class="num">$35,000</td></tr>
+          <tr><td>Waits pickup / drop</td><td class="num">0.5 / 0.5 min</td><td class="num">0 / 0 min</td></tr>
+          <tr><td>Robot pick / drop</td><td class="num">0 / 0 s</td><td class="num">35 / 25 s</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><strong>AMR type</strong> resets price, waits and handling to that robot's defaults. <em>Reset to catalogue values</em> undoes your edits.</li>
+        <li><strong>Cycle time defaults</strong>: speed efficiency (0.75 typical, 0.6 in busy areas), wait at pickup and drop while people load, the robot's own pick and drop time, and extra delay for doors or lifts.</li>
+        <li><strong>Operation</strong>: hours and days worked, peak-hour factor (about 1.3), target utilisation (0.75 leaves headroom), spare robots and robots per charger.</li>
+        <li><strong>Manual baseline</strong>: how loads move today (walking, pallet truck or forklift sets the pace), labour rate and on-cost uplift. Handling time stays with people after automation.</li>
+        <li><strong>Routes and demand</strong>: one row per route. Enter an override distance, loads per day, loads per trip (batching cuts trips), kg per trip and the narrowest aisle. Red chips flag over payload or too narrow an aisle. Routes with the same <em>Group</em> share robots.</li>
+        <li><strong>Cycle time by route</strong>: override any timing for one route, cap speed in a slow zone, or enter a fixed cycle from a trial. Blank uses the default (grey); your values are outlined in orange.</li>
+        <li><strong>Fleet by group</strong>: calculated robots per group, with charging and utilisation. Type a number in <em>Your override</em> to fix the fleet. Red means over 85% busy; amber under 25%.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>3 · Business case</h2>
+      <ul>
+        <li><strong>Buy (capex)</strong> or <strong>Robot-as-a-Service</strong>: RaaS swaps the robot price for a monthly fee.</li>
+        <li><strong>Investment</strong>: robot and charger prices, integration, site prep, training, and top modules or carts per robot.</li>
+        <li><strong>Running costs</strong>: maintenance as a yearly % of robot cost, and fleet software per robot per month.</li>
+        <li><strong>People time kept per trip</strong> reduces the saving; <strong>equipment cost avoided</strong> adds retired forklifts or truck leases.</li>
+        <li><strong>Savings basis</strong>: <em>Hours released</em> counts every hour; <em>Whole FTEs only</em> is the conservative view.</li>
+        <li><strong>Outputs</strong>: investment, net saving per month, payback, NPV, ROI, the cash chart, cost build-up, and a sensitivity table at ±20% labour rate and 0.75× to 2× demand.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Saving and sharing</h2>
+      <ul>
+        <li><strong>Autosave</strong> keeps projects on this device. Clearing the app's data deletes them.</li>
+        <li><strong>Save project</strong> writes a <code>.amr.json</code> file, including the layout, to Downloads/AMR Route Planner on Android.</li>
+        <li><strong>Open file</strong> loads a saved project. Send the file to a colleague to share a design.</li>
+        <li><strong>Export results CSV</strong> saves routes, trips, cycle times, robots and the financial summary for Excel.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>How the numbers are calculated</h2>
+      <ul class="formulas">
+        <li><strong>Cycle</strong> = d ÷ (eff × loaded speed) + d ÷ (eff × empty speed) + pick + drop + waits + extra delay, where d is the one-way distance.</li>
+        <li><strong>AMR trips/day</strong> = loads per day ÷ AMR loads per trip. <strong>Robot hours/day</strong> = trips × cycle.</li>
+        <li><strong>Robots per group</strong> = peak-hour robot load ÷ (uptime × target utilisation), rounded up. Peak load = Σ trips × peak factor ÷ operating hours × cycle.</li>
+        <li><strong>Charging</strong>: if each robot's daily work exceeds its run time, the fleet grows by charge time ÷ run time.</li>
+        <li><strong>Manual hours/day</strong> = manual trips × (2d × pace + handling). <strong>Manual cost/month</strong> = hours × rate × (1 + uplift) × days.</li>
+        <li><strong>Net/month</strong> = labour released + equipment avoided − maintenance − software (or RaaS fees). <strong>Payback</strong> = investment ÷ net/month.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Troubleshooting</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>“Not calibrated” chip</td><td class="wrap">Use Calibrate scale on a known dimension.</td></tr>
+          <tr><td>Can't start a route</td><td class="wrap">Tap directly on a station dot; add stations first.</td></tr>
+          <tr><td>Route cuts through racking</td><td class="wrap">Add more corner points, or untick Snap 90°.</td></tr>
+          <tr><td>“% vs quoted” chip</td><td class="wrap">Measured distance differs from your quoted figure by over 20%. Recalibrate or enter an override.</td></tr>
+          <tr><td>“Aisle too narrow”</td><td class="wrap">Reroute, or use the small parts AMR.</td></tr>
+          <tr><td>“Over payload”</td><td class="wrap">Carry fewer loads per trip, or use the pallet AMR.</td></tr>
+          <tr><td>No payback</td><td class="wrap">Check demand, labour rate and fleet size; merge lightly used groups.</td></tr>
+          <tr><td>PDF won't upload</td><td class="wrap">Export the page as PNG or JPG first.</td></tr>
+          <tr><td>Projects disappeared</td><td class="wrap">Open your last Save project file.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="note">Before trusting a result: calibrate on a long known dimension, check one route against a paced distance, use real demand (P90 if peaks matter), time the waits on the floor, and replace prices with supplier quotes.</p>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+
+<div class="modal-bg" id="modalBg"><form class="modal" id="modal"><h2 id="mTitle"></h2><div id="mBody" class="stack"></div><div class="actions"><button type="button" id="mCancel">Cancel</button><button type="submit" class="primary" id="mOk">OK</button></div></form></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+const FT = 3.28084;
+const CLASSES = {
+  parts:{label:"Small parts AMR", waitLoad:0.5, waitDrop:0.5, pickS:0, dropS:0},
+  pallet:{label:"Pallet AMR", waitLoad:0, waitDrop:0, pickS:35, dropS:25}
+};
+// Two reference robots. Every figure can be edited in the app; prices are the user's planning figures.
+const CATALOGUE = [
+  {id:"pudu-t300", cls:"parts", maker:"Pudu", model:"T300", payload:300, speedE:1.2, speedL:1.2, runtime:8, charge:2, aisle:0.6, price:24000,
+    pub:"300 kg, 1.2 m/s, 12 h empty / 6 h full load, 2 h charge (0–90%), 60 cm min path.", est:"8 h run time assumes part loads. Price $24,000 is the planning default: edit it to your quote."},
+  {id:"pudu-mp2000", cls:"pallet", maker:"Pudu", model:"MP2000", payload:2000, speedE:1.6, speedL:1.2, runtime:8, charge:2, aisle:2.0, price:35000, pickS:35, dropS:25,
+    pub:"2,000 kg, 1.6 m/s empty / 1.2 m/s loaded, 12 h empty / 6 h max load, ~2 h charge (200–240 V), fork-in in 20 s, 200 mm lift (floor-to-floor), ~2.0 m right-angle stacking aisle for 1200×1000 pallets.", est:"8 h typical run time; 35 s pick / 25 s drop including lift and approach. Price $35,000 is the planning default: edit it to your quote."}
+];
+const MANUAL_METHODS = {
+  walk:{label:"Walking with cart or tote (≈0.40 s/ft)", sPerFt:0.40},
+  hpt:{label:"Hand pallet truck (typical ≈0.45 s/ft)", sPerFt:0.45},
+  ppt:{label:"Powered pallet truck (typical ≈0.30 s/ft)", sPerFt:0.30},
+  flt:{label:"Counterbalance forklift (typical ≈0.25 s/ft)", sPerFt:0.25},
+  custom:{label:"Custom pace", sPerFt:null}
+};
+const COLORS = ["#D9480F","#1C7ED6","#2F9E44","#AE3EC9","#E8590C","#0CA678","#F59F00","#5C7CFA","#C2255C","#495057"];
+
+
+function robotFrom(cat, keep){
+  const cl=CLASSES[cat.cls]||CLASSES.parts;
+  const r={model:cat.id, cls:cat.cls, payload:cat.payload, speedE:cat.speedE, speedL:cat.speedL, runtime:cat.runtime, charge:cat.charge, aisle:cat.aisle,
+    pickS: cat.pickS ?? cl.pickS, dropS: cat.dropS ?? cl.dropS, waitLoad:cl.waitLoad, waitDrop:cl.waitDrop, eff:0.75, uptime:0.95, extraS:0};
+  if(keep){ ["eff","uptime","extraS"].forEach(k=>r[k]=keep[k]); }
+  return r;
+}
+function baseSettings(){return{
+  unit:"ft", cur:"$", customRobots:[], groupOverride:{},
+  robot: robotFrom(CATALOGUE[0]),
+  ops:{hours:8, days:21, peak:1.3, util:0.75, spare:0, perCharger:2},
+  manual:{method:"walk", pace:0.4*FT, handle:0, rate:22, burden:0},
+  fin:{mode:"capex", price:24000, raas:1200, charger:1500, integ:15000, site:5000, train:3000, accy:0, maint:8, soft:100, retain:0, equip:0, disc:8, years:5, basis:"hours", fteH:7}
+}}
+const ROUTE_DEFAULTS = {kg:0, aisle:null, waitLoad:null, waitDrop:null, speedCap:null, extraS:null, pickS:null, dropS:null, cycleMin:null, override:null, quoted:null, group:"Shared pool", manualPer:1, amrPer:1, loads:0, pts:[]};
+function normalize(p){
+  const b=baseSettings();
+  ["ops","manual","fin"].forEach(k=>p[k]=Object.assign({},b[k],p[k]||{}));
+  const r=p.robot||{};
+  if(r.speed!=null && r.speedE==null){ r.speedE=r.speed; r.speedL=r.speed; }
+  if(r.dwellLoad!=null && r.waitLoad==null) r.waitLoad=r.dwellLoad;
+  if(r.dwellUnload!=null && r.waitDrop==null) r.waitDrop=r.dwellUnload;
+  if(!CATALOGUE.some(c=>c.id===r.model)){ const pal = r.cls==="pallet" || /1200pj|agilox|mp2000/.test(r.model||""); r.model = pal?"pudu-mp2000":"pudu-t300"; r.cls = pal?"pallet":"parts"; }
+  if(!CLASSES[r.cls]) r.cls = (CATALOGUE.find(c=>c.id===r.model)||CATALOGUE[0]).cls;
+  const cat=CATALOGUE.find(c=>c.id===r.model)||CATALOGUE[0];
+  p.robot=Object.assign(robotFrom(cat), r);
+  if(!p.robot.cls) p.robot.cls=cat.cls;
+  delete p.robot.speed; delete p.robot.dwellLoad; delete p.robot.dwellUnload;
+  p.customRobots=p.customRobots||[]; p.groupOverride=p.groupOverride||{};
+  p.routes=(p.routes||[]).map(x=>Object.assign({},ROUTE_DEFAULTS,x));
+  p.stations=p.stations||[]; p.layout=p.layout||{src:null,mpp:null};
+  if(!p.unit) p.unit="ft"; if(!p.cur) p.cur="$";
+  return p;
+}
+const FTpx = (ftPerPx)=>ftPerPx/FT; // metres per px
+function demoGeneric(){
+  // Example site: 120 m × 80 m, drawn on a grid (1 px = 0.1 m). Example data only.
+  const p = Object.assign(baseSettings(),{name:"Demo site (example data)", demo:true,
+    layout:{src:null, mpp:0.1, w:1200, h:800, zones:[
+      {x:200,y:80,w:200,h:520,label:"Small-parts store",c:"#1C7ED6"},
+      {x:700,y:120,w:260,h:560,label:"Production",c:"#2F9E44"},
+      {x:30,y:620,w:150,h:150,label:"Goods in",c:"#F59F00"},
+      {x:1030,y:620,w:150,h:150,label:"Dispatch",c:"#AE3EC9"}]},
+    stations:[
+      {id:"GI",name:"Goods in",x:105,y:700},{id:"ST",name:"Store issue point",x:300,y:150},{id:"WH",name:"Store put-away",x:300,y:450},
+      {id:"L1",name:"Line 1",x:780,y:200},{id:"L2",name:"Line 2",x:780,y:400},{id:"L3",name:"Line 3",x:780,y:600},
+      {id:"DS",name:"Dispatch",x:1105,y:700}],
+    routes:[
+      R("g1","Store → Line 1","ST","L1",[[550,150],[550,200]],60,1,null,"Line feed"),
+      R("g2","Store → Line 2","ST","L2",[[550,150],[550,400]],45,1,null,"Line feed"),
+      R("g3","Store → Line 3","ST","L3",[[550,150],[550,600]],30,1,null,"Line feed"),
+      R("g4","Goods in → Store put-away","GI","WH",[[105,450]],25,1,null,"Line feed"),
+      R("g5","Line 1 → Dispatch","L1","DS",[[1000,200],[1000,700]],20,1,null,"Line feed")
+    ]});
+  p.manual.rate=20;
+  return p;
+}
+function R(id,name,from,to,pts,loads,manualPer,quotedFt,group){
+  return Object.assign({},ROUTE_DEFAULTS,{id,name,from,to,pts,loads,manualPer,amrPer:manualPer,override:quotedFt==null?null:quotedFt/FT,quoted:quotedFt==null?null:quotedFt/FT,group:group||"Shared pool"});
+}
+function allModels(){ return CATALOGUE }
+function catById(id){ return allModels().find(c=>c.id===id) }
+/* ---------- state ---------- */
+let P = null; const img = new Image(); let imgOK=false;
+let view={x:0,y:0,k:1}; let mode="pan"; let selRoute=null;
+let draft=null; // {kind:'route'|'measure'|'calib', pts:[[x,y]], from}
+let projects=[];
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const LSKEY="amr-route-planner-v1";
+
+function loadStore(){ try{ const s=localStorage.getItem(LSKEY); return s?JSON.parse(s):[] }catch(e){ return [] } }
+function saveStore(){ try{ localStorage.setItem(LSKEY, JSON.stringify(projects.filter(p=>!p.demo))) }catch(e){} }
+let saveT=null; function autosave(){ clearTimeout(saveT); saveT=setTimeout(saveStore,600) }
+
+function init(){
+  projects=[demoGeneric(),...loadStore()].map(normalize);
+  fillProjSel(); setProject(0);
+  bind();
+}
+function fillProjSel(){
+  $("#projSel").innerHTML = projects.map((p,i)=>`<option value="${i}">${esc(p.name)}</option>`).join("");
+}
+function setProject(i){
+  P=projects[i]; $("#projSel").value=i; selRoute=null; draft=null;
+  imgOK=false; img.onload=()=>{imgOK=true; fit(); draw();}; img.onerror=()=>{imgOK=false; fit(); draw();};
+  needFit=true; if(P.layout && P.layout.src){ img.src=P.layout.src } else { fit(); draw() }
+  syncInputs(); renderAll();
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- geometry & units ---------- */
+function stById(id){return P.stations.find(s=>s.id===id)}
+function routePath(r){const a=stById(r.from),b=stById(r.to); if(!a||!b) return []; return [[a.x,a.y],...r.pts,[b.x,b.y]]}
+function pathPx(pts){let d=0;for(let i=1;i<pts.length;i++)d+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);return d}
+function measuredM(r){ const px=pathPx(routePath(r)); return P.layout&&P.layout.mpp? px*P.layout.mpp : null }
+function usedM(r){ if(r.override!=null && r.override!=="") return +r.override; const m=measuredM(r); return m==null?(r.quoted||0):m }
+const toU = m => P.unit==="ft"? m*FT : m;
+const fromU = v => P.unit==="ft"? v/FT : v;
+const uLbl = ()=>P.unit;
+function fmtD(m,d=0){ return m==null?"–":toU(m).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}) }
+function money(v,d=0){ if(!isFinite(v)) return "–"; const s=Math.abs(v).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}); return (v<0?"−":"")+P.cur+s }
+function nf(v,d=1){ return isFinite(v)? v.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}) : "–" }
+
+/* ---------- model ---------- */
+const ov=(v,d)=> (v==null||v==="") ? d : +v;   // route override or default
+function routeCycle(r){
+  const rb=P.robot, d=usedM(r);
+  const cap = ov(r.speedCap, Infinity);
+  const vE = Math.max(0.05, Math.min(rb.speedE, cap)*rb.eff), vL = Math.max(0.05, Math.min(rb.speedL, cap)*rb.eff);
+  const travelS = d/vL + d/vE;
+  const handleS = ov(r.pickS, rb.pickS) + ov(r.dropS, rb.dropS);
+  const waitS = (ov(r.waitLoad, rb.waitLoad) + ov(r.waitDrop, rb.waitDrop))*60;
+  const extraS = ov(r.extraS, rb.extraS);
+  const calc = travelS+handleS+waitS+extraS;
+  const fixed = r.cycleMin!=null && r.cycleMin!=="" && +r.cycleMin>0;
+  return {d, travelS, handleS, waitS, extraS, calc, cycleS: fixed? +r.cycleMin*60 : calc, fixed};
+}
+function compute(over={}){
+  const rb=P.robot, op=P.ops, mn=P.manual, fn=P.fin;
+  const demandK = over.demand ?? 1, rate = over.rate ?? mn.rate, useOverride = !over.noOverride;
+  const chargeR = rb.runtime>0? rb.charge/rb.runtime : 0;
+  const routes = P.routes.map(r=>{
+    const cy=routeCycle(r), d=cy.d, rt=2*d, loads=(+r.loads||0)*demandK;
+    const mTrips = loads/Math.max(0.01,+r.manualPer||1), aTrips = loads/Math.max(0.01,+r.amrPer||1);
+    const walkH = mTrips*(rt*mn.pace)/3600;
+    const manualH = walkH + mTrips*mn.handle/60;
+    const robotH = aTrips*cy.cycleS/3600;
+    const peakTripsH = op.hours>0? aTrips*op.peak/op.hours : 0;
+    const peakLoad = peakTripsH*cy.cycleS/3600;
+    const retainH = aTrips*fn.retain/60;
+    const issues=[];
+    if(r.kg>0 && r.kg>rb.payload) issues.push(["bad","Over payload"]);
+    if(r.aisle>0 && rb.aisle>0 && r.aisle<rb.aisle) issues.push(["bad","Aisle too narrow"]);
+    return {r,cy,d,rt,loads,mTrips,aTrips,manualH,walkH,robotH,peakLoad,retainH,issues};
+  });
+  const groups={};
+  routes.forEach(x=>{const g=x.r.group||"Shared pool"; (groups[g] ||= {name:g,load:0,robotH:0,trips:0,routes:0}); groups[g].load+=x.peakLoad; groups[g].robotH+=x.robotH; groups[g].trips+=x.aTrips; groups[g].routes++;});
+  const gl=Object.values(groups).map(g=>{
+    g.eq = g.load/Math.max(0.01, rb.uptime*op.util);
+    let n = g.trips>0? Math.max(1,Math.ceil(g.eq-1e-9)) : 0;
+    g.inShift = false;
+    if(n && (g.robotH/n > rb.runtime || op.hours + rb.charge > 24)){ g.inShift=true; g.eq*= (1+chargeR); n=Math.max(1,Math.ceil(g.eq-1e-9)); }
+    g.calc=n;
+    const o = useOverride? P.groupOverride[g.name] : null;
+    g.override = (o!=null && o!=="" && +o>=0)? +o : null;
+    g.robots = g.override!=null? g.override : n;
+    g.util = g.robots? g.robotH/(g.robots*op.hours*rb.uptime) : 0;
+    return g});
+  const robots = gl.reduce((a,g)=>a+g.robots,0) + (+op.spare||0);
+  const manualHday = routes.reduce((a,x)=>a+x.manualH,0), walkHday=routes.reduce((a,x)=>a+x.walkH,0), retainHday=routes.reduce((a,x)=>a+x.retainH,0);
+  const robotHday = routes.reduce((a,x)=>a+x.robotH,0);
+  const burden = 1+(mn.burden||0)/100;
+  const manualMonth = manualHday*rate*burden*op.days;
+  let savedHday = Math.max(0, walkHday - retainHday);
+  const fteReleased = savedHday/Math.max(0.5,fn.fteH);
+  if(fn.basis==="fte") savedHday = Math.floor(fteReleased+1e-9)*fn.fteH;
+  const labourSaving = savedHday*rate*burden*op.days;
+  const savingMonth = labourSaving + (+fn.equip||0);
+  const chargers = robots? Math.ceil(robots/Math.max(1,op.perCharger)):0;
+  const robotCapex = fn.mode==="capex"? robots*fn.price : 0;
+  const capex = robotCapex + chargers*fn.charger + robots*(+fn.accy||0) + fn.integ + fn.site + fn.train;
+  const opexMonth = (fn.mode==="capex"? robotCapex*fn.maint/100/12 : robots*fn.raas) + robots*fn.soft;
+  const netMonth = savingMonth - opexMonth;
+  const months = Math.max(1,Math.round(fn.years*12)); const rm = Math.pow(1+fn.disc/100,1/12)-1;
+  let cum=-capex, npv=-capex, payback=null; const series=[{m:0,v:cum}];
+  for(let m=1;m<=months;m++){ const prev=cum; cum+=netMonth; npv+=netMonth/Math.pow(1+rm,m); series.push({m,v:cum}); if(payback==null && cum>=0 && netMonth>0) payback = m-1 + (-prev)/netMonth; }
+  let beyond=false; if(payback==null && netMonth>0){ payback=capex/netMonth; beyond=true; }
+  const roi = capex>0? (netMonth*months - capex)/capex : null;
+  return {beyond,routes,groups:gl,robots,chargeR,manualHday,walkHday,robotHday,retainHday,savedHday,fteReleased,manualMonth,labourSaving,savingMonth,chargers,robotCapex,capex,opexMonth,netMonth,npv,payback,roi,series,months};
+}
+
+/* ---------- rendering: KPIs, tables ---------- */
+function renderAll(){ const c=compute(); renderKpis(c); renderLists(); renderRouteTable(c); renderCycleTable(c); renderGroups(c); renderCase(c); hint(); draw(); autosave(); }
+function renderKpis(c){
+  const pb = c.payback==null? "No payback" : nf(c.payback,1)+" mo"+(c.beyond?" (past horizon)":"");
+  const cat=catById(P.robot.model);
+  const items=[
+    ["Robots needed", c.robots, `${cat?cat.maker+" "+cat.model:"Custom"} · ${c.robots? nf(c.robotHday/(c.robots*P.ops.hours)*100,0):0}% busy`, true],
+    ["Robot hours / day", nf(c.robotHday,1), `${nf(c.routes.reduce((a,x)=>a+x.aTrips,0),0)} trips / day`],
+    ["Manual cost / month", money(c.manualMonth), `${nf(c.manualHday,1)} h / day today`],
+    ["Saving / month", money(c.savingMonth), `${nf(c.savedHday,1)} h / day released`],
+    ["Net / month after running", money(c.netMonth), `capex ${money(c.capex)}`],
+    ["Payback", pb, `${P.fin.years}-yr NPV ${money(c.npv)}`, true]];
+  $("#kpis").innerHTML = items.map(([k,v,s,hl])=>`<div class="kpi${hl?" hl":""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`).join("");
+}
+function renderLists(){
+  $("#stList").innerHTML = P.stations.length? P.stations.map(s=>`<div class="row" data-st="${s.id}"><span class="dot" style="background:var(--ink)"></span><span class="grow">${esc(s.name)}</span><button data-act="ren-st" data-id="${s.id}">Rename</button><button data-act="del-st" data-id="${s.id}" aria-label="Delete ${esc(s.name)}">✕</button></div>`).join("") : `<div class="note">No stations yet. Choose Add station and click the plan.</div>`;
+  $("#rtList").innerHTML = P.routes.length? P.routes.map((r,i)=>{const m=measuredM(r); return `<div class="row${selRoute===r.id?" sel":""}" data-rt="${r.id}"><span class="dot" style="background:${COLORS[i%COLORS.length]}"></span><span class="grow" title="${esc(r.name)}">${esc(r.name)}</span><span class="num" style="font-size:12px">${m==null?"–":fmtD(m)+" "+uLbl()}</span><button data-act="del-rt" data-id="${r.id}" aria-label="Delete ${esc(r.name)}">✕</button></div>`}).join("") : `<div class="note">No routes yet. Choose Draw route, click a start station, any corner points, then the end station.</div>`;
+  const s=P.layout&&P.layout.mpp;
+  $("#scaleInfo").innerHTML = !imgOK && !(P.layout&&P.layout.src) ? "Upload a site layout (PNG or JPG; export a PDF page as an image first)." :
+    s ? `1 px = <span class="num">${(toU(s)).toFixed(3)} ${uLbl()}</span>. ${P.demo?"Example site with a set scale. For your own layout, use Calibrate scale.":"Recalibrate any time with Calibrate scale."}` : `<span class="chip warn">Not calibrated</span> Use Calibrate scale on a known dimension before trusting distances.`;
+}
+function routeOpts(sel){ return P.stations.map(s=>`<option value="${s.id}"${s.id===sel?" selected":""}>${esc(s.name)}</option>`).join("") }
+function ovInput(f, val, def, step, label){
+  const set = !(val==null||val==="");
+  return `<input type="number" class="ovr${set?" set":""}" data-f="${f}" step="${step}" value="${set?val:""}" placeholder="${def}" aria-label="${label}">`;
+}
+function renderRouteTable(c){
+  const u=uLbl(), rb=P.robot;
+  const head=`<thead><tr><th>Route</th><th>From</th><th>To</th><th class="n">Measured ${u}</th><th class="n">Quoted ${u}</th><th class="n">Override ${u}</th><th class="n">Loads / day</th><th class="n">Manual loads / trip</th><th class="n">AMR loads / trip</th><th class="n">kg / trip</th><th class="n">Narrowest aisle (m)</th><th>Group</th><th>Check</th></tr></thead>`;
+  const body=c.routes.map((x,i)=>{const r=x.r,m=measuredM(r);
+    const diff = (m!=null && r.quoted)? (m-r.quoted)/r.quoted : null;
+    let chk = x.issues.length? x.issues.map(([k,t])=>`<span class="chip ${k}">${t}</span>`).join(" ")
+      : diff!=null && Math.abs(diff)>0.2 ? `<span class="chip warn">${diff>0?"+":""}${nf(diff*100,0)}% vs quoted</span>` : x.loads? `<span class="chip good">OK</span>` : `<span class="chip neutral">No demand</span>`;
+    return `<tr data-ri="${i}"><td><input type="text" data-f="name" value="${esc(r.name)}" aria-label="Route name"></td>
+    <td><select data-f="from" aria-label="From">${routeOpts(r.from)}</select></td><td><select data-f="to" aria-label="To">${routeOpts(r.to)}</select></td>
+    <td class="n num">${fmtD(m)}</td><td class="n num">${r.quoted?fmtD(r.quoted):"–"}</td>
+    <td><input type="number" class="ovr${r.override==null||r.override===""?"":" set"}" data-f="override" value="${r.override==null||r.override===""?"":Math.round(toU(r.override))}" placeholder="${m==null?"–":Math.round(toU(m))}" aria-label="Override distance"></td>
+    <td><input type="number" data-f="loads" step="0.1" value="${r.loads}" aria-label="Loads per day"></td>
+    <td><input type="number" data-f="manualPer" step="0.1" value="${r.manualPer}" aria-label="Manual loads per trip"></td>
+    <td><input type="number" data-f="amrPer" step="0.1" value="${r.amrPer}" aria-label="AMR loads per trip"></td>
+    <td><input type="number" data-f="kg" value="${r.kg||""}" placeholder="–" aria-label="kg per trip"></td>
+    <td><input type="number" data-f="aisle" step="0.05" value="${r.aisle||""}" placeholder="–" aria-label="Narrowest aisle in metres"></td>
+    <td><input type="text" data-f="group" value="${esc(r.group)}" style="min-width:110px" aria-label="Robot group"></td>
+    <td>${chk}</td></tr>`}).join("");
+  $("#rtTable").innerHTML=head+"<tbody>"+body+"</tbody>";
+}
+function renderCycleTable(c){
+  const rb=P.robot;
+  const head=`<thead><tr><th>Route</th><th class="n">One-way ${uLbl()}</th><th class="n">Wait pickup (min)</th><th class="n">Wait drop (min)</th><th class="n">Pick (s)</th><th class="n">Drop (s)</th><th class="n">Speed cap (m/s)</th><th class="n">Extra (s)</th><th class="n">Fixed cycle (min)</th><th class="n">Travel</th><th class="n">Handling</th><th class="n">Waits</th><th class="n">Cycle (min)</th><th class="n">AMR trips</th><th class="n">Robot h / day</th><th class="n">Manual h / day</th></tr></thead>`;
+  const body=c.routes.map((x,i)=>{const r=x.r, cy=x.cy;
+    return `<tr data-ri="${i}"><td>${esc(r.name)}</td><td class="n num">${fmtD(cy.d)}</td>
+    <td>${ovInput("waitLoad",r.waitLoad,rb.waitLoad,0.25,"Wait at pickup")}</td>
+    <td>${ovInput("waitDrop",r.waitDrop,rb.waitDrop,0.25,"Wait at drop")}</td>
+    <td>${ovInput("pickS",r.pickS,rb.pickS,5,"Pick time")}</td>
+    <td>${ovInput("dropS",r.dropS,rb.dropS,5,"Drop time")}</td>
+    <td>${ovInput("speedCap",r.speedCap,"–",0.1,"Speed cap")}</td>
+    <td>${ovInput("extraS",r.extraS,rb.extraS,5,"Extra delay")}</td>
+    <td>${ovInput("cycleMin",r.cycleMin,"calc",0.1,"Fixed cycle time")}</td>
+    <td class="n num">${nf(cy.travelS/60,1)}</td><td class="n num">${nf(cy.handleS/60,1)}</td><td class="n num">${nf(cy.waitS/60,1)}</td>
+    <td class="n num"><strong>${nf(cy.cycleS/60,1)}</strong>${cy.fixed?` <span class="chip warn">fixed</span>`:""}</td>
+    <td class="n num">${nf(x.aTrips,1)}</td><td class="n num">${nf(x.robotH,2)}</td><td class="n num">${nf(x.manualH,2)}</td></tr>`}).join("");
+  const foot=`<tfoot><tr><td colspan="13">Total</td><td class="n num">${nf(c.routes.reduce((a,x)=>a+x.aTrips,0),1)}</td><td class="n num">${nf(c.robotHday,2)}</td><td class="n num">${nf(c.manualHday,2)}</td></tr></tfoot>`;
+  $("#cyTable").innerHTML=head+"<tbody>"+body+"</tbody>"+foot;
+}
+function renderGroups(c){
+  const rb=P.robot;
+  $("#grpTable").innerHTML = `<thead><tr><th>Group</th><th class="n">Routes</th><th class="n">Trips / day</th><th class="n">Robot h / day</th><th class="n">Peak robot load</th><th>Charging</th><th class="n">Calculated</th><th class="n">Your override</th><th class="n">Robots used</th><th class="n">Average busy</th></tr></thead><tbody>`+
+    c.groups.map(g=>{const u=g.util; const chip = !g.robots?"":u>0.85?`<span class="chip bad">${nf(u*100,0)}%</span>`:u<0.25?`<span class="chip warn">${nf(u*100,0)}%</span>`:`<span class="chip good">${nf(u*100,0)}%</span>`;
+      return `<tr data-g="${esc(g.name)}"><td>${esc(g.name)}</td><td class="n num">${g.routes}</td><td class="n num">${nf(g.trips,1)}</td><td class="n num">${nf(g.robotH,2)}</td><td class="n num">${nf(g.eq,2)}</td><td>${g.trips?(g.inShift?`<span class="chip warn">In shift</span>`:`<span class="chip neutral">Off shift</span>`):""}</td><td class="n num">${g.calc}</td><td><input type="number" class="ovr${g.override!=null?" set":""}" data-gov="${esc(g.name)}" min="0" step="1" value="${g.override??""}" placeholder="${g.calc}" aria-label="Robot override for ${esc(g.name)}" style="min-width:70px"></td><td class="n num"><strong>${g.robots}</strong></td><td class="n">${chip}</td></tr>`}).join("")+
+    `</tbody><tfoot><tr><td>Total incl. ${P.ops.spare||0} spare</td><td></td><td></td><td class="n num">${nf(c.robotHday,2)}</td><td></td><td></td><td></td><td></td><td class="n num">${c.robots}</td><td></td></tr></tfoot>`;
+  $("#availNote").innerHTML = `Peak robot load = busy-hour trips × cycle ÷ (uptime ${nf(rb.uptime*100,0)}% × target utilisation ${nf(P.ops.util*100,0)}%). Charging happens off shift when each robot's daily work fits within its run time (${rb.runtime} h) and the shift leaves ${rb.charge} h to recharge. Otherwise the fleet is grown by the charge ratio (${nf(rb.charge,2)} h per ${rb.runtime} h = +${nf(c.chargeR*100,0)}%). Under 25% busy means robots are lightly used: merge groups or add routes. Type a number in “Your override” to fix a group's fleet size.`;
+}
+function renderCase(c){
+  $$("[data-fm]").forEach(b=>b.classList.toggle("on",b.dataset.fm===P.fin.mode));
+  const tiles=[["Investment",money(c.capex)],["Net saving / month",money(c.netMonth)],["Payback",c.payback==null?"Never":nf(c.payback,1)+" months"+(c.beyond?" (past horizon)":"")],[`${P.fin.years}-yr NPV @ ${P.fin.disc}%`,money(c.npv)],[`${P.fin.years}-yr ROI`,c.roi==null?"–":nf(c.roi*100,0)+"%"],["FTE released",nf(c.fteReleased,2)]];
+  $("#caseTiles").innerHTML=tiles.map(([k,v])=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+  const rows=[
+    ["Manual cost today", c.manualMonth, "month", `${nf(c.manualHday,2)} h/day × ${money(P.manual.rate,2)} × ${(1+P.manual.burden/100).toFixed(2)} × ${P.ops.days} days`],
+    ["Labour released (travel)", c.labourSaving, "month", `${nf(c.savedHday,2)} h/day${P.fin.basis==="fte"?" (whole FTEs)":""}`],
+    ["Equipment cost avoided", +P.fin.equip||0, "month", ""],
+    [P.fin.mode==="capex"?"Maintenance":"RaaS fees", P.fin.mode==="capex"? c.robotCapex*P.fin.maint/100/12 : c.robots*P.fin.raas, "month", P.fin.mode==="capex"?`${P.fin.maint}% of ${money(c.robotCapex)} / 12`:`${c.robots} × ${money(P.fin.raas)}`],
+    ["Fleet software", c.robots*P.fin.soft, "month", `${c.robots} × ${money(P.fin.soft)}`],
+    ["Robots", c.robotCapex, "one-off", P.fin.mode==="capex"?`${c.robots} × ${money(P.fin.price)}`:"in RaaS fee"],
+    ["Chargers", c.chargers*P.fin.charger, "one-off", `${c.chargers} × ${money(P.fin.charger)}`],
+    ["Top modules, racks, carts", c.robots*(+P.fin.accy||0), "one-off", `${c.robots} × ${money(+P.fin.accy||0)}`],
+    ["Integration, site prep, training", P.fin.integ+P.fin.site+P.fin.train, "one-off", ""]];
+  $("#costTable").innerHTML=`<thead><tr><th>Line</th><th class="n">Amount</th><th>Basis</th><th>Working</th></tr></thead><tbody>`+rows.map(r=>`<tr><td>${r[0]}</td><td class="n num">${money(r[1])}</td><td>${r[2]}</td><td class="note">${r[3]}</td></tr>`).join("")+`</tbody>`;
+  const rates=[0.8,1,1.2], dem=[0.75,1,1.5,2];
+  $("#sensTable").innerHTML=`<thead><tr><th>Labour rate</th>${dem.map(d=>`<th class="n">Demand ×${d}</th>`).join("")}</tr></thead><tbody>`+
+    rates.map(rf=>`<tr><td>${money(P.manual.rate*rf,2)}</td>${dem.map(d=>{const s=compute({rate:P.manual.rate*rf,demand:d,noOverride:true}); return `<td class="n num">${s.payback==null?"never":nf(s.payback,0)+" ("+s.robots+" bots)"}</td>`}).join("")}</tr>`).join("")+`</tbody>`;
+  drawCash(c);
+}
+function hint(){
+  const msgs={pan:"Drag to pan, scroll or pinch to zoom. Drag a station to move it; routes follow. Click a route to select it.",
+    calib:"Click the two ends of a dimension you know (a rack length, a column grid). You’ll be asked for its real length.",
+    station:"Click where a robot picks up or drops off.",
+    route: draft&&draft.kind==="route" ? `From ${esc(stById(draft.from)?.name||"")}: click corner points along the aisle, then click the destination station. Esc cancels.` : "Click the start station.",
+    measure: draft&&draft.kind==="measure" ? `Path: <strong class="num">${fmtD(pathPx(draft.pts)*(P.layout?.mpp||0),1)} ${uLbl()}</strong>. Keep clicking; Finish or double-click to stop.` : "Click points to measure along a path."};
+  $("#hint").innerHTML = msgs[mode] + (P.layout&&!P.layout.mpp?` <span class="chip warn">Scale not set</span>`:"");
+}
+
+/* ---------- canvas ---------- */
+const cv=$("#plan"), ctx=cv.getContext("2d");
+let needFit=true;
+function resize(){ const r=$("#wrap").getBoundingClientRect(); const d=window.devicePixelRatio||1; cv.width=Math.max(1,r.width*d); cv.height=Math.max(1,r.height*d); if(needFit && r.width>1 && planDims()){ fit(); } draw(); }
+function planDims(){ if(imgOK) return [img.naturalWidth,img.naturalHeight]; if(P&&P.layout&&P.layout.w) return [P.layout.w,P.layout.h]; return null; }
+function fit(){ const r=$("#wrap").getBoundingClientRect(); const d=planDims(); if(!d||!r.width) return; needFit=false; const k=Math.min(r.width/d[0], r.height/d[1])*0.96; view.k=k; view.x=(r.width-d[0]*k)/2; view.y=(r.height-d[1]*k)/2; draw(); }
+const w2s=(x,y)=>[x*view.k+view.x, y*view.k+view.y];
+const s2w=(x,y)=>[(x-view.x)/view.k,(y-view.y)/view.k];
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+let hover=null;
+function draw(){
+  const d=window.devicePixelRatio||1; ctx.setTransform(d,0,0,d,0,0);
+  const W=cv.width/d,H=cv.height/d; ctx.clearRect(0,0,W,H);
+  const dims=planDims();
+  if(!dims){ ctx.fillStyle=css("--muted"); ctx.font="14px "+css("--body"); ctx.textAlign="center"; ctx.fillText(P&&P.layout&&P.layout.src?"Loading layout…":"Upload a site layout to start", W/2, H/2); return; }
+  ctx.save(); ctx.translate(view.x,view.y); ctx.scale(view.k,view.k);
+  if(imgOK) ctx.drawImage(img,0,0);
+  else { ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,dims[0],dims[1]); const mpp=P.layout.mpp||1, step=(P.unit==="ft"?10/FT:5)/mpp; ctx.strokeStyle="rgba(22,33,43,.08)"; ctx.lineWidth=1/view.k; ctx.beginPath(); for(let x=0;x<=dims[0];x+=step){ctx.moveTo(x,0);ctx.lineTo(x,dims[1]);} for(let y=0;y<=dims[1];y+=step){ctx.moveTo(0,y);ctx.lineTo(dims[0],y);} ctx.stroke(); ctx.strokeStyle="rgba(22,33,43,.35)"; ctx.lineWidth=2/view.k; ctx.strokeRect(0,0,dims[0],dims[1]);
+    (P.layout.zones||[]).forEach(z=>{ ctx.globalAlpha=.12; ctx.fillStyle=z.c; ctx.fillRect(z.x,z.y,z.w,z.h); ctx.globalAlpha=1; ctx.strokeStyle=z.c; ctx.lineWidth=2/view.k; ctx.strokeRect(z.x,z.y,z.w,z.h); ctx.fillStyle=z.c; ctx.font=`600 ${14/view.k}px `+css("--body"); ctx.textAlign="left"; ctx.textBaseline="bottom"; ctx.fillText(z.label,z.x+6/view.k,z.y+z.h-6/view.k); }); }
+  ctx.restore();
+  if(!imgOK){ ctx.fillStyle=css("--muted"); ctx.font="12px "+css("--body"); ctx.textAlign="left"; ctx.fillText(`${P.layout.zones?"Example layout":"No layout image"} · grid ${P.unit==="ft"?"10 ft":"5 m"}`, 10, H-12); }
+  ctx.lineCap="round"; ctx.lineJoin="round";
+  P.routes.forEach((r,i)=>{ const pts=routePath(r); if(pts.length<2) return; const col=COLORS[i%COLORS.length]; const sel=selRoute===r.id;
+    ctx.beginPath(); pts.forEach((p,j)=>{const [x,y]=w2s(...p); j?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+    ctx.strokeStyle="rgba(255,255,255,.85)"; ctx.lineWidth=sel?9:6; ctx.stroke();
+    ctx.strokeStyle=col; ctx.lineWidth=sel?5:3; ctx.setLineDash(sel?[]:[]); ctx.stroke();
+    if(sel){ r.pts.forEach(p=>{const [x,y]=w2s(...p); ctx.fillStyle="#fff"; ctx.strokeStyle=col; ctx.lineWidth=2; ctx.beginPath(); ctx.rect(x-4,y-4,8,8); ctx.fill(); ctx.stroke();});
+      const m=measuredM(r); const mid=pts[Math.floor(pts.length/2)]; const [mx,my]=w2s(...mid); label(`${esc(r.name)} · ${fmtD(m)} ${uLbl()} one-way`, mx+8, my-8, col); }
+  });
+  P.stations.forEach(s=>{ const [x,y]=w2s(s.x,s.y); ctx.beginPath(); ctx.arc(x,y,9,0,Math.PI*2); ctx.fillStyle=hover===s.id?css("--accent"):"#16212B"; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle="#fff"; ctx.stroke();
+    ctx.fillStyle="#fff"; ctx.font="600 10px "+css("--mono"); ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(s.name).trim().charAt(0).toUpperCase(),x,y+0.5);
+    if(view.k>0.35||hover===s.id){ label(s.name, x+12, y-12, "#16212B"); } });
+  if(draft && draft.pts.length){ const col = draft.kind==="calib"?"#C0392B": draft.kind==="measure"?"#1C7ED6":css("--accent");
+    const pts=[...draft.pts]; if(draft.cursor) pts.push(draft.cursor);
+    ctx.beginPath(); pts.forEach((p,j)=>{const [x,y]=w2s(...p); j?ctx.lineTo(x,y):ctx.moveTo(x,y)}); ctx.setLineDash([7,5]); ctx.strokeStyle=col; ctx.lineWidth=3; ctx.stroke(); ctx.setLineDash([]);
+    pts.forEach(p=>{const [x,y]=w2s(...p); ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fillStyle=col; ctx.fill();});
+    if(P.layout&&P.layout.mpp){ const L=pathPx(pts)*P.layout.mpp; const [x,y]=w2s(...pts[pts.length-1]); label(`${fmtD(L,1)} ${uLbl()}`, x+10, y+16, col); }
+  }
+}
+function label(t,x,y,col){ ctx.font="600 12px "+css("--body"); ctx.textAlign="left"; ctx.textBaseline="middle"; const w=ctx.measureText(t).width+12; ctx.fillStyle="rgba(255,255,255,.93)"; ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect? ctx.roundRect(x,y-11,w,22,5):ctx.rect(x,y-11,w,22); ctx.fill(); ctx.stroke(); ctx.fillStyle="#16212B"; ctx.fillText(t,x+6,y); }
+
+function nearStation(sx,sy){ let best=null,bd=16; P.stations.forEach(s=>{const [x,y]=w2s(s.x,s.y); const d=Math.hypot(x-sx,y-sy); if(d<bd){bd=d;best=s}}); return best }
+function nearRoute(sx,sy){ let best=null,bd=10; P.routes.forEach(r=>{const pts=routePath(r).map(p=>w2s(...p)); for(let i=1;i<pts.length;i++){const d=segDist(sx,sy,pts[i-1],pts[i]); if(d<bd){bd=d;best=r}}}); return best }
+function segDist(px,py,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const L=dx*dx+dy*dy;let t=L?((px-a[0])*dx+(py-a[1])*dy)/L:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-(a[0]+t*dx),py-(a[1]+t*dy))}
+function snapPt(prev,p){ if(!$("#snap").checked||!prev) return p; const dx=p[0]-prev[0],dy=p[1]-prev[1]; return Math.abs(dx)>Math.abs(dy)?[p[0],prev[1]]:[prev[0],p[1]] }
+
+/* pointer handling with pan, pinch and taps */
+const ptrs=new Map(); let drag=null, pinch=null, lastTap=0;
+cv.addEventListener("pointerdown",e=>{ cv.setPointerCapture(e.pointerId); const r=cv.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; ptrs.set(e.pointerId,[sx,sy]);
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),k:view.k,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,vx:view.x,vy:view.y}; drag=null; return; }
+  const st = mode==="pan"? nearStation(sx,sy):null;
+  drag={sx,sy,vx:view.x,vy:view.y,moved:false,st, stx:st?.x, sty:st?.y};
+});
+cv.addEventListener("pointermove",e=>{ const r=cv.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,[sx,sy]);
+  if(pinch && ptrs.size===2){ const [a,b]=[...ptrs.values()]; const d=Math.hypot(a[0]-b[0],a[1]-b[1]); const k=Math.min(8,Math.max(0.05,pinch.k*d/pinch.d)); const [wx,wy]=[(pinch.cx-pinch.vx)/pinch.k,(pinch.cy-pinch.vy)/pinch.k]; const cx=(a[0]+b[0])/2, cy=(a[1]+b[1])/2; view.k=k; view.x=cx-wx*k; view.y=cy-wy*k; draw(); return; }
+  if(drag){ const dx=sx-drag.sx, dy=sy-drag.sy; if(Math.hypot(dx,dy)>5) drag.moved=true;
+    if(drag.moved){ if(drag.st){ drag.st.x=drag.stx+dx/view.k; drag.st.y=drag.sty+dy/view.k; draw(); } else { view.x=drag.vx+dx; view.y=drag.vy+dy; draw(); } } return; }
+  const h=nearStation(sx,sy); const hid=h?h.id:null; let need=false; if(hid!==hover){hover=hid; need=true}
+  if(draft && draft.pts.length){ let p=s2w(sx,sy); const st=(draft.kind==="route")?nearStation(sx,sy):null; draft.cursor = st?[st.x,st.y]:snapPt(draft.pts[draft.pts.length-1],p); need=true; if(draft.kind==="measure") hint(); }
+  if(need) draw();
+});
+function endPtr(e){ const r=cv.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; ptrs.delete(e.pointerId);
+  if(pinch){ if(ptrs.size<2) pinch=null; drag=null; return; }
+  if(!drag) return; const d=drag; drag=null;
+  if(d.moved){ if(d.st) renderAll(); return; }
+  const now=Date.now(); const dbl = now-lastTap<300; lastTap=now;
+  tap(sx,sy,dbl);
+}
+cv.addEventListener("pointerup",endPtr); cv.addEventListener("pointercancel",e=>{ptrs.delete(e.pointerId);drag=null;pinch=null});
+cv.addEventListener("wheel",e=>{ e.preventDefault(); const r=cv.getBoundingClientRect(); const sx=e.clientX-r.left, sy=e.clientY-r.top; const [wx,wy]=s2w(sx,sy); const k=Math.min(8,Math.max(0.05,view.k*Math.exp(-e.deltaY*0.0015))); view.k=k; view.x=sx-wx*k; view.y=sy-wy*k; draw(); },{passive:false});
+
+async function tap(sx,sy,dbl){
+  if(!planDims()) return;
+  const w=s2w(sx,sy);
+  if(mode==="pan"){ const r=nearRoute(sx,sy); selRoute=r?r.id:null; renderLists(); draw(); return; }
+  if(mode==="station"){ const res=await ask("New station",[{id:"name",label:"Name",type:"text",value:`Station ${P.stations.length+1}`}]); if(!res) return; P.stations.push({id:"s"+Date.now().toString(36),name:res.name||"Station",x:w[0],y:w[1]}); renderAll(); return; }
+  if(mode==="calib"){
+    if(!draft) { draft={kind:"calib",pts:[w]}; draw(); return; }
+    const p=snapPt(draft.pts[0],w); draft.pts.push(p); draw(); const px=pathPx(draft.pts);
+    const res=await ask("Set scale",[{id:"len",label:`Real length of this line (${uLbl()})`,type:"number",value:""}],`The line is ${nf(px,0)} pixels long.`);
+    draft=null; if(res && +res.len>0){ P.layout.mpp = fromU(+res.len)/px; P.demo=false; toast("Scale set"); } renderAll(); return; }
+  if(mode==="measure"){
+    if(!draft) draft={kind:"measure",pts:[]};
+    if(dbl && draft.pts.length>1){ finishMeasure(); return; }
+    draft.pts.push(snapPt(draft.pts[draft.pts.length-1],w)); hint(); draw(); return; }
+  if(mode==="route"){
+    const st=nearStation(sx,sy);
+    if(!draft){ if(!st){ toast("Start on a station, or add one first"); return; } draft={kind:"route",from:st.id,pts:[[st.x,st.y]]}; hint(); draw(); return; }
+    if(st && st.id!==draft.from){ const pts=draft.pts.slice(1); const from=draft.from; draft=null;
+      const res=await ask("New route",[{id:"name",label:"Route name",type:"text",value:`${stById(from).name} → ${st.name}`},{id:"loads",label:"Loads per day",type:"number",value:"10"}]);
+      if(res){ const r=Object.assign({},ROUTE_DEFAULTS,{id:"r"+Date.now().toString(36),name:res.name,from,to:st.id,pts,loads:+res.loads||0}); P.routes.push(r); selRoute=r.id; }
+      renderAll(); return; }
+    draft.pts.push(snapPt(draft.pts[draft.pts.length-1],w)); draw(); }
+}
+function finishMeasure(){ if(draft&&draft.kind==="measure"&&draft.pts.length>1){ const L=pathPx(draft.pts)*(P.layout?.mpp||0); toast(`Measured ${fmtD(L,1)} ${uLbl()}`); } draft=null; hint(); draw(); }
+function setMode(m){ mode=m; draft=null; $$("#tools [data-mode]").forEach(b=>b.classList.toggle("on",b.dataset.mode===m)); cv.style.cursor = m==="pan"?"grab":"crosshair"; hint(); draw(); }
+
+/* ---------- cash chart ---------- */
+function drawCash(c){
+  const el=$("#cashChart"); const box=el.getBoundingClientRect(); if(!box.width) return; const d=window.devicePixelRatio||1; el.width=box.width*d; el.height=box.height*d; const g=el.getContext("2d"); g.setTransform(d,0,0,d,0,0);
+  const W=box.width,H=box.height, L=70,Rm=16,T=14,B=30; const s=c.series; const vals=s.map(p=>p.v); let lo=Math.min(0,...vals), hi=Math.max(0,...vals); if(hi===lo){hi=lo+1}
+  const step=niceStep((hi-lo)/5); lo=Math.floor(lo/step)*step; hi=Math.ceil(hi/step)*step;
+  const X=m=>L+(W-L-Rm)*m/c.months, Y=v=>T+(H-T-B)*(hi-v)/(hi-lo);
+  g.font="11px "+css("--mono"); g.fillStyle=css("--muted"); g.strokeStyle=css("--line"); g.lineWidth=1; g.textAlign="right"; g.textBaseline="middle";
+  for(let v=lo; v<=hi+1e-6; v+=step){ g.beginPath(); g.moveTo(L,Y(v)); g.lineTo(W-Rm,Y(v)); g.stroke(); g.fillText(compactMoney(v),L-6,Y(v)); }
+  g.textAlign="center"; g.textBaseline="top"; for(let y=0;y<=c.months/12;y++){ g.fillText(y===0?"Start":`Yr ${y}`, X(y*12), H-B+8); }
+  g.strokeStyle=css("--ink"); g.lineWidth=1.5; g.beginPath(); g.moveTo(L,Y(0)); g.lineTo(W-Rm,Y(0)); g.stroke();
+  const acc=css("--accent");
+  g.beginPath(); s.forEach((p,i)=> i?g.lineTo(X(p.m),Y(p.v)):g.moveTo(X(p.m),Y(p.v))); g.lineTo(X(c.months),Y(0)); g.lineTo(X(0),Y(0)); g.closePath(); g.globalAlpha=.12; g.fillStyle=acc; g.fill(); g.globalAlpha=1;
+  g.beginPath(); s.forEach((p,i)=> i?g.lineTo(X(p.m),Y(p.v)):g.moveTo(X(p.m),Y(p.v))); g.strokeStyle=acc; g.lineWidth=2.5; g.stroke();
+  const last=s[s.length-1]; g.beginPath(); g.arc(X(last.m),Y(last.v),4,0,Math.PI*2); g.fillStyle=acc; g.fill();
+  g.textAlign="right"; g.textBaseline="bottom"; g.fillStyle=css("--ink"); g.font="600 12px "+css("--mono"); g.fillText(money(last.v), X(last.m)-6, Y(last.v)-6);
+  if(c.payback!=null && c.payback<=c.months){ const x=X(c.payback); g.setLineDash([4,4]); g.strokeStyle=css("--good"); g.lineWidth=1.5; g.beginPath(); g.moveTo(x,T); g.lineTo(x,H-B); g.stroke(); g.setLineDash([]); g.fillStyle=css("--good"); g.textAlign="left"; g.textBaseline="top"; g.font="600 12px "+css("--body"); g.fillText(`Payback ${nf(c.payback,1)} months`, Math.min(x+6,W-150), T+2); }
+}
+function niceStep(x){ const p=Math.pow(10,Math.floor(Math.log10(Math.max(x,1e-9)))); const f=x/p; return (f<=1?1:f<=2?2:f<=5?5:10)*p }
+function compactMoney(v){ const a=Math.abs(v); const s=a>=1e6?(a/1e6).toFixed(1)+"M":a>=1e3?(a/1e3).toFixed(0)+"k":a.toFixed(0); return (v<0?"−":"")+P.cur+s }
+
+/* ---------- modal & toast ---------- */
+function ask(title,fields,intro){ return new Promise(res=>{ $("#mTitle").textContent=title;
+  $("#mBody").innerHTML=(intro?`<div class="note">${intro}</div>`:"")+fields.map(f=>f.type==="select"? `<label for="mf-${f.id}">${f.label}<select id="mf-${f.id}">${f.options.map(([v,t])=>`<option value="${v}"${v===f.value?" selected":""}>${esc(t)}</option>`).join("")}</select></label>` : `<label for="mf-${f.id}">${f.label}<input id="mf-${f.id}" type="${f.type}" value="${esc(f.value)}" ${f.type==="number"?'step="any"':''}></label>`).join("");
+  $("#modalBg").classList.add("open"); const first=$("#mBody input, #mBody select"); setTimeout(()=>{first&&first.focus(); first&&first.tagName==="INPUT"&&first.select()},30);
+  const done=v=>{ $("#modalBg").classList.remove("open"); $("#modal").onsubmit=null; $("#mCancel").onclick=null; res(v) };
+  $("#modal").onsubmit=e=>{e.preventDefault(); const o={}; fields.forEach(f=>o[f.id]=$("#mf-"+f.id).value); done(o)};
+  $("#mCancel").onclick=()=>done(null); }); }
+let tT; function toast(t){ const el=$("#toast"); el.textContent=t; el.classList.add("show"); clearTimeout(tT); tT=setTimeout(()=>el.classList.remove("show"),2200) }
+
+/* ---------- inputs ---------- */
+function getK(path){ return path.split(".").reduce((o,k)=>o[k],P) }
+function setK(path,v){ const ks=path.split("."); const last=ks.pop(); ks.reduce((o,k)=>o[k],P)[last]=v }
+function modelOptions(){
+  return CATALOGUE.map(m=>`<option value="${m.id}">${CLASSES[m.cls].label} · ${esc(m.maker+" "+m.model)} (${m.payload.toLocaleString()} kg)</option>`).join("");
+}
+function robotNote(){
+  const cat=catById(P.robot.model); const cl=CLASSES[P.robot.cls]||CLASSES.parts;
+  $("#robotClassChip").innerHTML=`<span class="chip neutral">${cl.label}</span>`;
+  if(!cat){ $("#robotNote").textContent="Custom figures."; return; }
+  const changed=["payload","speedE","speedL","runtime","charge","aisle"].filter(k=>cat[k]!=null && +P.robot[k]!==+cat[k]);
+  $("#robotNote").innerHTML = (cat.pub?`<strong>Published:</strong> ${esc(cat.pub)} `:"") + (cat.est?`<strong>Estimated:</strong> ${esc(cat.est)} `:"") + (changed.length?`<br><span class="chip warn">Edited: ${changed.join(", ")}</span>`:"");
+}
+function syncInputs(){
+  $$("[data-k]").forEach(el=>{ el.value=getK(el.dataset.k) });
+  $("#rModel").innerHTML=modelOptions(); $("#rModel").value=P.robot.model;
+  $("#mMethod").innerHTML=Object.entries(MANUAL_METHODS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join(""); $("#mMethod").value=P.manual.method||"custom";
+  robotNote();
+  $("#unitSel").value=P.unit; $("#curSel").value=P.cur;
+  $("#mPaceL").firstChild.textContent=`Travel pace (sec / ${P.unit}) `; $("#mPace").value=+(P.unit==="ft"?P.manual.pace/FT:P.manual.pace).toFixed(3);
+}
+function applyModel(id, keepWaits){
+  const cat=catById(id); if(!cat) return;
+  const prevCls=P.robot.cls; const keep=P.robot;
+  const nr=robotFrom(cat, keep);
+  if(keepWaits || prevCls===cat.cls){ ["waitLoad","waitDrop"].forEach(k=>nr[k]=keep[k]); if(cat.pickS==null && prevCls===cat.cls){ nr.pickS=keep.pickS; nr.dropS=keep.dropS; } }
+  P.robot=nr; P.fin.price=cat.price;
+  syncInputs(); renderAll();
+  if(prevCls!==cat.cls) toast(`Switched to ${CLASSES[cat.cls].label}: price, wait and handling defaults updated`);
+}
+function bind(){
+  $$(".tab").forEach(t=>t.addEventListener("click",()=>{ $$(".tab").forEach(x=>x.setAttribute("aria-selected",x===t)); $$("section.view").forEach(s=>s.classList.toggle("active",s.id==="v-"+t.dataset.v)); if(t.dataset.v==="layout"){resize();} if(t.dataset.v==="case") drawCash(compute()); }));
+  $$("#tools [data-mode]").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));
+  $("#btnFit").onclick=fit;
+  $("#btnUndoPt").onclick=()=>{ if(draft&&draft.pts.length>1){draft.pts.pop(); hint(); draw();} else {draft=null; hint(); draw();} };
+  $("#btnFinish").onclick=()=>{ if(mode==="measure") finishMeasure(); else { draft=null; hint(); draw(); } };
+  cv.addEventListener("dblclick",e=>{ if(mode==="measure") finishMeasure(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("#modalBg").classList.contains("open")){ draft=null; hint(); draw(); } if((e.key==="Backspace"||e.key==="Delete")&&selRoute&&mode==="pan"&&document.activeElement===document.body){ delRoute(selRoute);} });
+  $("#btnUpload").onclick=()=>$("#fileImg").click();
+  $("#fileImg").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ const fresh=!P.demo && P.stations.length===0 && P.routes.length===0;
+      if(P.demo || !fresh){ const np=Object.assign(baseSettings(),{name:f.name.replace(/\.[^.]+$/,"")+" · new layout",layout:{src:rd.result,mpp:null},stations:[],routes:[]}); ["robot","ops","manual","fin","customRobots"].forEach(k=>np[k]=JSON.parse(JSON.stringify(P[k]))); np.unit=P.unit; np.cur=P.cur; projects.push(np); fillProjSel(); setProject(projects.length-1); }
+      else { P.layout={src:rd.result,mpp:null}; setProject(projects.indexOf(P)); }
+      setMode("calib"); toast("Layout loaded. Calibrate the scale next."); }; rd.readAsDataURL(f); e.target.value=""; };
+  $("#projSel").onchange=e=>setProject(+e.target.value);
+  $("#btnNew").onclick=async()=>{ const res=await ask("New project",[{id:"name",label:"Project name",type:"text",value:"New site"}],"Starts empty. Upload a layout next."); if(!res) return; const np=Object.assign(baseSettings(),{name:res.name||"New site",layout:{src:null,mpp:null},stations:[],routes:[]}); np.customRobots=JSON.parse(JSON.stringify(P.customRobots||[])); projects.push(np); fillProjSel(); setProject(projects.length-1); $("#btnUpload").focus(); };
+  $("#btnOpen").onclick=()=>$("#fileProj").click();
+  $("#fileProj").onchange=e=>{ const f=e.target.files[0]; if(!f) return; f.text().then(t=>{ try{ const p=JSON.parse(t); if(!p.routes||!p.stations) throw 0; p.demo=false; projects.push(normalize(p)); fillProjSel(); setProject(projects.length-1); toast("Project opened"); }catch(err){ toast("That file isn’t an AMR planner project (.json)") } }); e.target.value=""; };
+  $("#btnSave").onclick=()=>offerDownload(slug(P.name)+".amr.json", JSON.stringify(Object.assign({},P,{demo:false}),null,1), "Project saved");
+  $("#btnCsv").onclick=()=>offerDownload(slug(P.name)+"-results.csv", csv(), "Results exported");
+  $("#unitSel").onchange=e=>{ P.unit=e.target.value; syncInputs(); renderAll(); };
+  $("#curSel").onchange=e=>{ P.cur=e.target.value; renderAll(); };
+  $("#rModel").onchange=e=>applyModel(e.target.value);
+  $("#btnResetRobot").onclick=()=>{ const cat=catById(P.robot.model); if(!cat) return; const cl=CLASSES[cat.cls]; Object.assign(P.robot,{payload:cat.payload,speedE:cat.speedE,speedL:cat.speedL,runtime:cat.runtime,charge:cat.charge,aisle:cat.aisle,pickS:cat.pickS??cl.pickS,dropS:cat.dropS??cl.dropS}); P.fin.price=cat.price; syncInputs(); renderAll(); toast("Catalogue values restored"); };
+  $("#mMethod").onchange=e=>{ const k=e.target.value; P.manual.method=k; const m=MANUAL_METHODS[k]; if(m.sPerFt!=null) P.manual.pace=m.sPerFt*FT; syncInputs(); renderAll(); };
+  $$("[data-k]").forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{ const v= el.type==="number"? (parseFloat(el.value)||0) : el.value; setK(el.dataset.k,v);
+    $$(`[data-k="${el.dataset.k}"]`).forEach(o=>{ if(o!==el) o.value=el.value }); if(el.dataset.k.startsWith("robot.")) robotNote(); renderAll(); }));
+  $("#mPace").addEventListener("input",e=>{ const v=parseFloat(e.target.value)||0; P.manual.pace = P.unit==="ft"? v*FT : v; P.manual.method="custom"; $("#mMethod").value="custom"; renderAll(); });
+  $$("[data-fm]").forEach(b=>b.onclick=()=>{ P.fin.mode=b.dataset.fm; renderAll(); });
+  const onRouteEdit=e=>{ const tr=e.target.closest("tr[data-ri]"); if(!tr||!e.target.dataset.f) return; const r=P.routes[+tr.dataset.ri], f=e.target.dataset.f; let v=e.target.value;
+    if(f==="override") r.override = v===""? null : fromU(parseFloat(v));
+    else if(["waitLoad","waitDrop","speedCap","extraS","pickS","dropS","cycleMin","aisle"].includes(f)) r[f] = v===""? null : parseFloat(v);
+    else if(["loads","manualPer","amrPer","kg"].includes(f)) r[f]=parseFloat(v)||0; else r[f]=v||(f==="group"?"Shared pool":v);
+    renderAll(); };
+  $("#rtTable").addEventListener("change",onRouteEdit); $("#cyTable").addEventListener("change",onRouteEdit);
+  $("#grpTable").addEventListener("change",e=>{ const g=e.target.dataset.gov; if(g==null) return; const v=e.target.value; if(v==="") delete P.groupOverride[g]; else P.groupOverride[g]=Math.max(0,Math.round(parseFloat(v)||0)); renderAll(); });
+  $("#btnAddRoute").onclick=()=>{ if(P.stations.length<2){ toast("Add at least two stations on the layout first"); return; } P.routes.push(Object.assign({},ROUTE_DEFAULTS,{id:"r"+Date.now().toString(36),name:"New route",from:P.stations[0].id,to:P.stations[1].id,pts:[]})); renderAll(); };
+  document.addEventListener("click",async e=>{ const b=e.target.closest("button[data-act]");
+    if(b){ e.stopPropagation(); const id=b.dataset.id;
+      if(b.dataset.act==="del-rt") delRoute(id);
+      if(b.dataset.act==="del-st"){ const used=P.routes.filter(r=>r.from===id||r.to===id).length; if(used){ const ok=await ask("Delete station?",[],`${used} route${used>1?"s use":" uses"} this station and will be deleted too.`); if(!ok) return; } P.routes=P.routes.filter(r=>r.from!==id&&r.to!==id); P.stations=P.stations.filter(s=>s.id!==id); renderAll(); }
+      if(b.dataset.act==="ren-st"){ const s=stById(id); const res=await ask("Rename station",[{id:"name",label:"Name",type:"text",value:s.name}]); if(res){ s.name=res.name||s.name; renderAll(); } }
+      return; }
+    const row=e.target.closest(".row[data-rt]"); if(row){ selRoute=row.dataset.rt; renderLists(); draw(); }
+  });
+  new ResizeObserver(()=>{ const had=cv.width; resize(); if(had<=1) fit(); }).observe($("#wrap"));
+  window.addEventListener("resize",()=>{ if($("#v-case").classList.contains("active")) drawCash(compute()); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>renderAll());
+  new MutationObserver(()=>renderAll()).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+}
+function delRoute(id){ P.routes=P.routes.filter(r=>r.id!==id); if(selRoute===id) selRoute=null; renderAll(); }
+const slug=s=>String(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"amr-project";
+function csv(){ const c=compute(); const u=uLbl(); const rows=[["Route","From","To",`One-way ${u}`,"Loads/day","Manual trips/day","AMR trips/day","Cycle min","Robot h/day","Manual h/day","Group"]];
+  c.routes.forEach(x=>rows.push([x.r.name,stById(x.r.from)?.name,stById(x.r.to)?.name,toU(x.d).toFixed(1),x.loads,x.mTrips.toFixed(2),x.aTrips.toFixed(2),(x.cy.cycleS/60).toFixed(2),x.robotH.toFixed(2),x.manualH.toFixed(2),x.r.group]));
+  rows.push([]); rows.push(["Robots",c.robots]); rows.push(["Manual cost / month",c.manualMonth.toFixed(0)]); rows.push(["Saving / month",c.savingMonth.toFixed(0)]); rows.push(["Running cost / month",c.opexMonth.toFixed(0)]); rows.push(["Capex",c.capex.toFixed(0)]); rows.push(["Payback months",c.payback==null?"none":c.payback.toFixed(1)]); rows.push([`NPV ${P.fin.years} yr`,c.npv.toFixed(0)]);
+  return rows.map(r=>r.map(v=>{v=v==null?"":String(v); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v}).join(",")).join("\n"); }
+let downloads=null;
+async function offerDownload(name,data,ok){
+  if(!window.AndroidBridge && !(window.claude && window.claude.use)){
+    try{ const type=name.endsWith(".csv")?"text/csv":"application/json"; const url=URL.createObjectURL(new Blob([data],{type})); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); toast(ok); return; }catch(e){ showCopy(name,data); return; }
+  }
+  if(window.AndroidBridge && AndroidBridge.saveFile){ try{ const where=AndroidBridge.saveFile(name,data); toast(where?`Saved to ${where}`:ok); }catch(e){ showCopy(name,data); } return; }
+  if(!downloads){ showCopy(name,data); return; }
+  try{ await downloads.save({filename:name,data}); toast(ok); }
+  catch(err){ if(err&&err.code==="declined") return; if(err&&err.code==="rate_limited"){ toast("A save prompt is already open"); return; } showCopy(name,data); }
+}
+function showCopy(name,data){ $("#mTitle").textContent=name; $("#mBody").innerHTML=`<div class="note">Downloads aren’t available in this view. Copy the text and save it as <strong>${esc(name)}</strong>.</div><textarea id="copyTa" aria-label="File contents" readonly></textarea><button type="button" id="copyBtn">Copy to clipboard</button>`; $("#copyTa").value=data; $("#modalBg").classList.add("open");
+  $("#copyBtn").onclick=async()=>{ if(window.AndroidBridge&&AndroidBridge.copy){ AndroidBridge.copy(data); toast("Copied"); return; } try{ await navigator.clipboard.writeText(data); toast("Copied"); }catch(e){ $("#copyTa").select(); toast("Select all and copy"); } };
+  $("#modal").onsubmit=e=>{e.preventDefault(); $("#modalBg").classList.remove("open")}; $("#mCancel").onclick=()=>$("#modalBg").classList.remove("open"); }
+
+init();
+(async()=>{ try{ if(window.claude&&window.claude.use){ downloads = await window.claude.use("downloads"); } }catch(e){ downloads=null } })();
+</script>
+</body>
+</html>
